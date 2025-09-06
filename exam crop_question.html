@@ -1,0 +1,331 @@
+{% extends 'exam/adminbase.html' %}
+{% block content %}
+{% load static %}
+
+<head>
+  <style>
+    .crop-container {
+      background: #fff;
+      border-radius: 1rem;
+      box-shadow: 0 2px 16px #0001;
+      padding: 2rem;
+      margin: 2rem 0;
+    }
+    .crop-header {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #0288d1;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    .image-crop-area {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      margin: 1rem 0;
+    }
+    .crop-image {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+    }
+    .crop-overlay {
+      position: absolute;
+      border: 2px dashed #0288d1;
+      background: rgba(2, 136, 209, 0.1);
+      cursor: move;
+      min-width: 50px;
+      min-height: 50px;
+    }
+    .crop-handle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: #0288d1;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      cursor: nw-resize;
+    }
+    .crop-handle.nw { top: -5px; left: -5px; cursor: nw-resize; }
+    .crop-handle.ne { top: -5px; right: -5px; cursor: ne-resize; }
+    .crop-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
+    .crop-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
+    .crop-controls {
+      margin: 1.5rem 0;
+      text-align: center;
+    }
+    .btn-crop {
+      background: #4caf50;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      margin: 0 0.5rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-crop:hover {
+      background: #388e3c;
+    }
+    .btn-cancel {
+      background: #f44336;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      margin: 0 0.5rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-cancel:hover {
+      background: #d32f2f;
+    }
+    .btn-reset {
+      background: #ff9800;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      margin: 0 0.5rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-reset:hover {
+      background: #f57c00;
+    }
+    .crop-info {
+      background: #e3f2fd;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      color: #1565c0;
+    }
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 2rem;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #0288d1;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+
+<div class="container">
+  <div class="crop-container">
+    <div class="crop-header">Crop Question Image</div>
+    
+    <div class="crop-info">
+      <strong>Instructions:</strong> Drag the blue selection area to choose the part of the image you want to keep. 
+      You can resize the selection by dragging the corner handles. Click "Apply Crop" to save the changes.
+    </div>
+
+    <div class="image-crop-area" id="cropArea">
+      <img id="cropImage" class="crop-image" src="{{ question.image.url }}" alt="Question Image">
+      <div id="cropOverlay" class="crop-overlay" style="top: 10px; left: 10px; width: 200px; height: 150px;">
+        <div class="crop-handle nw"></div>
+        <div class="crop-handle ne"></div>
+        <div class="crop-handle sw"></div>
+        <div class="crop-handle se"></div>
+      </div>
+    </div>
+
+    <div class="crop-controls">
+      <button id="applyCrop" class="btn-crop">
+        <i class="fas fa-crop"></i> Apply Crop
+      </button>
+      <button id="resetCrop" class="btn-reset">
+        <i class="fas fa-undo"></i> Reset Selection
+      </button>
+      <a href="{% url 'view-question' question.course.id %}" class="btn-cancel">
+        <i class="fas fa-times"></i> Cancel
+      </a>
+    </div>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>Processing image crop...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const cropArea = document.getElementById('cropArea');
+  const cropImage = document.getElementById('cropImage');
+  const cropOverlay = document.getElementById('cropOverlay');
+  const applyCropBtn = document.getElementById('applyCrop');
+  const resetCropBtn = document.getElementById('resetCrop');
+  const loading = document.getElementById('loading');
+  
+  let isDragging = false;
+  let isResizing = false;
+  let currentHandle = null;
+  let startX, startY, startLeft, startTop, startWidth, startHeight;
+
+  // Initialize crop overlay position
+  function initializeCropOverlay() {
+    const imageRect = cropImage.getBoundingClientRect();
+    const containerRect = cropArea.getBoundingClientRect();
+    
+    // Set initial crop area to center of image
+    const overlayWidth = Math.min(300, imageRect.width * 0.6);
+    const overlayHeight = Math.min(200, imageRect.height * 0.6);
+    const overlayLeft = (imageRect.width - overlayWidth) / 2;
+    const overlayTop = (imageRect.height - overlayHeight) / 2;
+    
+    cropOverlay.style.left = overlayLeft + 'px';
+    cropOverlay.style.top = overlayTop + 'px';
+    cropOverlay.style.width = overlayWidth + 'px';
+    cropOverlay.style.height = overlayHeight + 'px';
+  }
+
+  // Wait for image to load before initializing
+  if (cropImage.complete) {
+    initializeCropOverlay();
+  } else {
+    cropImage.onload = initializeCropOverlay;
+  }
+
+  // Handle dragging
+  cropOverlay.addEventListener('mousedown', function(e) {
+    if (e.target.classList.contains('crop-handle')) {
+      isResizing = true;
+      currentHandle = e.target;
+    } else {
+      isDragging = true;
+    }
+    
+    startX = e.clientX;
+    startY = e.clientY;
+    startLeft = parseInt(cropOverlay.style.left);
+    startTop = parseInt(cropOverlay.style.top);
+    startWidth = parseInt(cropOverlay.style.width);
+    startHeight = parseInt(cropOverlay.style.height);
+    
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (isDragging) {
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      const newLeft = Math.max(0, Math.min(startLeft + deltaX, cropImage.offsetWidth - startWidth));
+      const newTop = Math.max(0, Math.min(startTop + deltaY, cropImage.offsetHeight - startHeight));
+      
+      cropOverlay.style.left = newLeft + 'px';
+      cropOverlay.style.top = newTop + 'px';
+    } else if (isResizing && currentHandle) {
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      let newLeft = startLeft;
+      let newTop = startTop;
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+      
+      if (currentHandle.classList.contains('nw')) {
+        newLeft = Math.max(0, startLeft + deltaX);
+        newTop = Math.max(0, startTop + deltaY);
+        newWidth = startWidth - (newLeft - startLeft);
+        newHeight = startHeight - (newTop - startTop);
+      } else if (currentHandle.classList.contains('ne')) {
+        newTop = Math.max(0, startTop + deltaY);
+        newWidth = Math.max(50, startWidth + deltaX);
+        newHeight = startHeight - (newTop - startTop);
+      } else if (currentHandle.classList.contains('sw')) {
+        newLeft = Math.max(0, startLeft + deltaX);
+        newWidth = startWidth - (newLeft - startLeft);
+        newHeight = Math.max(50, startHeight + deltaY);
+      } else if (currentHandle.classList.contains('se')) {
+        newWidth = Math.max(50, startWidth + deltaX);
+        newHeight = Math.max(50, startHeight + deltaY);
+      }
+      
+      // Ensure overlay stays within image bounds
+      newWidth = Math.min(newWidth, cropImage.offsetWidth - newLeft);
+      newHeight = Math.min(newHeight, cropImage.offsetHeight - newTop);
+      
+      if (newWidth >= 50 && newHeight >= 50) {
+        cropOverlay.style.left = newLeft + 'px';
+        cropOverlay.style.top = newTop + 'px';
+        cropOverlay.style.width = newWidth + 'px';
+        cropOverlay.style.height = newHeight + 'px';
+      }
+    }
+  });
+
+  document.addEventListener('mouseup', function() {
+    isDragging = false;
+    isResizing = false;
+    currentHandle = null;
+  });
+
+  // Reset crop selection
+  resetCropBtn.addEventListener('click', function() {
+    initializeCropOverlay();
+  });
+
+  // Apply crop
+  applyCropBtn.addEventListener('click', function() {
+    const imageRect = cropImage.getBoundingClientRect();
+    const overlayRect = cropOverlay.getBoundingClientRect();
+    
+    // Calculate crop coordinates relative to the original image
+    const scaleX = cropImage.naturalWidth / cropImage.offsetWidth;
+    const scaleY = cropImage.naturalHeight / cropImage.offsetHeight;
+    
+    const cropData = {
+      x: Math.round((overlayRect.left - imageRect.left) * scaleX),
+      y: Math.round((overlayRect.top - imageRect.top) * scaleY),
+      width: Math.round(overlayRect.width * scaleX),
+      height: Math.round(overlayRect.height * scaleY)
+    };
+    
+    // Show loading
+    loading.style.display = 'block';
+    applyCropBtn.disabled = true;
+    
+    // Send crop request
+    fetch('/crop-question-image/{{ question.id }}/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}'
+      },
+      body: JSON.stringify(cropData)
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        alert('Image cropped successfully!');
+        window.location.href = '{% url "view-question" question.course.id %}';
+      } else {
+        alert('Error cropping image: ' + data.error);
+        loading.style.display = 'none';
+        applyCropBtn.disabled = false;
+      }
+    })
+    .catch(error => {
+      alert('Error cropping image: ' + error);
+      loading.style.display = 'none';
+      applyCropBtn.disabled = false;
+    });
+  });
+});
+</script>
+
+{% endblock content %}
