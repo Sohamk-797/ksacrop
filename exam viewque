@@ -1,0 +1,131 @@
+{% extends 'exam/adminbase.html' %}
+{% block content %}
+{%load static%}
+
+<head>
+  <style>
+    .table-header {
+      font-size: 2rem;
+      font-weight: 600;
+      color: #0288d1;
+      margin: 2rem 0 1.5rem 0;
+      text-align: center;
+    }
+    .table-container {
+      background: #fff;
+      border-radius: 1rem;
+      box-shadow: 0 2px 16px #0001;
+      padding: 2rem 1.5rem;
+      border: none;
+    }
+    .table { table-layout: fixed; width: 100%; }
+    /* Ensure consistent top alignment and column-specific alignment */
+    .table th, .table td {
+      vertical-align: top !important;
+    }
+    .table thead th { text-align: center; }
+    .col-question { width: 56%; text-align: left; }
+    .col-answer { width: 18%; text-align: center; }
+    .col-marks { width: 10%; text-align: center; }
+    .col-action { width: 16%; text-align: center; }
+    .btn-danger { background: #ef5350; border: none; border-radius: 0.5rem; }
+    .btn-danger:hover { background: #b71c1c; }
+    @media (max-width: 600px) {
+      .table-container { padding: 1rem 0.5rem; }
+    }
+    .subject-section-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #37474f;
+      margin: 1.5rem 0 1rem 0;
+      text-transform: uppercase;
+      letter-spacing: 0.04rem;
+    }
+    .q-content { display: flex; gap: 16px; align-items: flex-start; }
+    .q-image-wrap { flex: 0 0 580px; }
+    .q-image { max-width: 100%; height: auto; max-height: 540px; object-fit: contain; border-radius: 6px; box-shadow: 0 1px 6px #0001; }
+    .q-body { flex: 1 1 auto; min-width: 0; }
+    .q-text {
+      text-align: left;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+    }
+    .answer-pill {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 999px;
+      background: #e3f2fd;
+      color: #1565c0;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    @media (max-width: 768px) {
+      .q-content { flex-direction: column; }
+      .q-image-wrap { flex: 0 0 auto; max-width: 100%; }
+      .col-question, .col-answer, .col-marks, .col-action { width: auto; }
+    }
+  </style>
+</head>
+<br><br>
+<div class="container">
+  <div class="table-header">Questions</div>
+  <div class="table-container">
+    {% regroup questions by subject as subject_groups %}
+    {% for group in subject_groups %}
+      <div class="subject-section-title">{{ group.grouper }}</div>
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th class="col-question">Questions</th>
+            <th class="col-answer">Answer</th>
+            <th class="col-marks">Marks</th>
+            <th class="col-action">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in group.list %}
+          <tr>
+            <td class="col-question">
+              <div class="q-content">
+                {% if c.image %}
+                  <div class="q-image-wrap">
+                    <img class="q-image" src="{{ c.image.url }}" alt="Question Image" />
+                  </div>
+                {% endif %}
+              </div>
+            </td>
+            <td class="col-answer">
+              {% if c.correct_answer == 'A' %}
+                <span class="answer-pill">A</span>
+              {% elif c.correct_answer == 'B' %}
+                <span class="answer-pill">B</span>
+              {% elif c.correct_answer == 'C' %}
+                <span class="answer-pill">C</span>
+              {% elif c.correct_answer == 'D' %}
+                <span class="answer-pill">D</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="col-marks">{{ c.marks }}</td>
+            <td class="col-action">
+              {% if c.image %}
+                <a class="btn btn-primary btn-xs" href="{% url 'crop-question' c.id %}" title="Crop Image" style="margin-right: 5px;">
+                  <i class="fas fa-crop"></i>
+                </a>
+              {% endif %}
+              <a class="btn btn-danger btn-xs" href="{% url 'delete-question' c.id  %}" title="Delete Question">
+                <i class="fas fa-trash"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endfor %}
+  </div>
+</div>
+
+<br><br><br><br><br><br>
+{% endblock content %}
